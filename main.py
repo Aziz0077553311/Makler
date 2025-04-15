@@ -1,15 +1,14 @@
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+import threading
 import time
 import os
 
 token = '7653124309:AAE2O_kF6ZajJzSaQbwdqDKXYMMeLU5GdKw'
 bot = telebot.TeleBot(token)
 
-# Удаляем webhook, если был установлен ранее
+# Webhookni o'chirish
 bot.remove_webhook()
-
-running = True
 
 ads = [
     {
@@ -19,7 +18,9 @@ ads = [
     # ... boshqa e'lonlar ...
 ]
 
-def send_ad(chat_id):
+active_users = set()
+
+def send_buttons(chat_id):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("NAVOIY ARZON UYLAR ✅", url='https://t.me/Arzon_uylari'))
     markup.add(InlineKeyboardButton("1 XONALI UYLAR ✅", url='https://t.me/+OAbLerahLHM4NGEy'))
@@ -34,17 +35,10 @@ def send_ad(chat_id):
     else:
         bot.send_message(chat_id, "❌ Fayl '1.jpg' topilmadi!")
 
-@bot.message_handler(commands=['start'])
-def welcome(message):
-    global running
-    chat_id = message.chat.id
-    running = True
-
-    send_ad(chat_id)
-
-    while running:
+def ad_loop(chat_id):
+    while chat_id in active_users:
         for ad in ads:
-            if not running:
+            if chat_id not in active_users:
                 break
             try:
                 media = []
@@ -63,16 +57,26 @@ def welcome(message):
                 bot.send_message(chat_id, f"❌ Xatolik: {str(e)}")
                 time.sleep(60)
 
-@bot.message_handler(commands=['stop'])
-def stop_bot(message):
-    global running
-    running = False
-    bot.send_message(message.chat.id, "✅ Bot to'xtatildi")
+@bot.message_handler(commands=['start'])
+def start(message):
+    chat_id = message.chat.id
+    if chat_id not in active_users:
+        active_users.add(chat_id)
+        send_buttons(chat_id)
+        threading.Thread(target=ad_loop, args=(chat_id,)).start()
+        bot.send_message(chat_id, "✅ Reklama boshladi!")
+    else:
+        bot.send_message(chat_id, "ℹ️ Sizda allaqachon reklama ishlayapti.")
 
-if __name__ == "__main__":
-    while True:
-        try:
-            bot.polling(none_stop=True)
-        except Exception as e:
-            print(f"❌ Botda xatolik: {e}")
-            time.sleep(10)
+@bot.message_handler(commands=['stop'])
+def stop(message):
+    chat_id = message.chat.id
+    if chat_id in active_users:
+        active_users.remove(chat_id)
+        bot.send_message(chat_id, "✅ Reklama to‘xtatildi.")
+    else:
+        bot.send_message(chat_id, "ℹ️ Sizda reklama ishlamayapti.")
+
+if __name__ == '__main__':
+    print("🚀 Bot ishga tushdi...")
+    bot.polling(none_stop=True)
